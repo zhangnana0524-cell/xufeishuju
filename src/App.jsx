@@ -14,12 +14,14 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [filterLevel, setFilterLevel] = useState(ALL);
   const [filterTeacher, setFilterTeacher] = useState(ALL);
+  const [uploadTime, setUploadTime] = useState(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('renewalData');
     if (saved) {
       try {
         setRawData(JSON.parse(saved));
+        setUploadTime(localStorage.getItem('renewalDataTime'));
       } catch (e) {
         console.error('加载保存的数据失败', e);
       }
@@ -63,10 +65,13 @@ function App() {
   const handleDataLoaded = (data) => {
     setIsLoading(true);
     setTimeout(() => {
+      const now = new Date().toLocaleString('zh-CN', { hour12: false });
       setRawData(data);
+      setUploadTime(now);
       setFilterLevel(ALL);
       setFilterTeacher(ALL);
       localStorage.setItem('renewalData', JSON.stringify(data));
+      localStorage.setItem('renewalDataTime', now);
       setIsLoading(false);
     }, 300);
   };
@@ -133,6 +138,9 @@ function App() {
                   {hasFilter
                     ? `当前筛选：${filterLevel !== ALL ? filterLevel : ''} ${filterTeacher !== ALL ? filterTeacher : ''}`
                     : '展示全部数据'}
+                  {uploadTime && (
+                    <span className="ml-3">📅 数据上传于 {uploadTime}（数据有更新时请点"重新上传"）</span>
+                  )}
                 </span>
               </div>
             </div>

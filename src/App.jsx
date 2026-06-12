@@ -175,46 +175,25 @@ function App() {
               <RenewalRateChart data={processedData.byTeacher} />
             )}
 
-            {/* 明细表格 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <DataTable
-                title="教师续费统计"
-                columns={[
-                  { label: '教师名称', key: 'name' },
-                  { label: '总人数', key: 'total' },
-                  { label: '已续费', key: 'renewed' },
-                  { label: '联报', key: 'combined' },
-                  { label: '未续费', key: 'notRenewed' },
-                  {
-                    label: '续费率(%)',
-                    key: 'rate',
-                    render: (val) => (
-                      <span className="badge badge-primary">{val}%</span>
-                    )
-                  }
-                ]}
-                data={processedData.byTeacher}
-              />
-
-              <DataTable
-                title="班级续费统计"
-                columns={[
-                  { label: '班级名称', key: 'name' },
-                  { label: '总人数', key: 'total' },
-                  { label: '已续费', key: 'renewed' },
-                  { label: '联报', key: 'combined' },
-                  { label: '未续费', key: 'notRenewed' },
-                  {
-                    label: '续费率(%)',
-                    key: 'rate',
-                    render: (val) => (
-                      <span className="badge badge-primary">{val}%</span>
-                    )
-                  }
-                ]}
-                data={processedData.byClass}
-              />
-            </div>
+            {/* 教师续费统计（前10名） */}
+            <DataTable
+              title="教师续费统计 TOP 10"
+              columns={[
+                { label: '教师名称', key: 'name' },
+                { label: '总人数', key: 'total' },
+                { label: '已续费', key: 'renewed' },
+                { label: '联报', key: 'combined' },
+                { label: '未续费', key: 'notRenewed' },
+                {
+                  label: '续费率(%)',
+                  key: 'rate',
+                  render: (val) => (
+                    <span className="badge badge-primary">{val}%</span>
+                  )
+                }
+              ]}
+              data={processedData.byTeacher.slice(0, 10)}
+            />
           </div>
         ) : (
           <div className="text-center py-12 text-base-content/50">

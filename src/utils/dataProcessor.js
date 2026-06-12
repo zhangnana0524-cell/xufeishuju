@@ -1,3 +1,22 @@
+// Excel中班级/教师列使用合并单元格，仅每组首行有值，需向下填充
+const FILL_COLUMNS = ['级别', 'Batch Name', 'Classes Name', '带班老师姓名', '教辅老师名称'];
+
+const forwardFill = (rows) => {
+  const last = {};
+  return rows.map(row => {
+    const filled = { ...row };
+    FILL_COLUMNS.forEach(col => {
+      const val = filled[col];
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        last[col] = val;
+      } else if (last[col] !== undefined) {
+        filled[col] = last[col];
+      }
+    });
+    return filled;
+  });
+};
+
 // 检查是否为应该排除的状态（退费、休学等）
 const isExcludedStatus = (status) => {
   if (!status) return false;
@@ -10,21 +29,22 @@ const isExcludedStatus = (status) => {
 };
 
 // 规范化续费状态
+// 注意判断顺序："未续费"包含"续费"子串，必须先于"已续费"判断
 const normalizeRenewalStatus = (status) => {
   if (!status) return '未知';
   const statusStr = String(status).trim().toLowerCase();
 
-  // 已续费状态
-  if (statusStr.includes('已续费') || statusStr.includes('续费')) {
-    return '已续费';
-  }
   // 联报状态
   if (statusStr.includes('联报')) {
     return '联报';
   }
-  // 未续费状态
-  if (statusStr.includes('未续费') || statusStr === '未' || statusStr === '') {
+  // 未续费状态（必须在"已续费"之前判断）
+  if (statusStr.includes('未续费') || statusStr.includes('不续') || statusStr === '未') {
     return '未续费';
+  }
+  // 已续费状态
+  if (statusStr.includes('已续费') || statusStr.includes('续费')) {
+    return '已续费';
   }
 
   return status; // 保持原值
@@ -47,8 +67,9 @@ export const processData = (rawData) => {
     };
   }
 
-  // 过滤有效数据（有student_id的行，且不是退费/休学状态）
-  const validData = rawData.filter(row =>
+  // 先向下填充合并单元格留下的空值，再过滤有效数据（有student_id的行，且不是退费/休学状态）
+  const filledData = forwardFill(rawData);
+  const validData = filledData.filter(row =>
     row.student_id && !isExcludedStatus(row['续费状态'])
   );
 

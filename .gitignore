@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 本地预览数据，包含学生信息，禁止提交
+public/preview-data.json

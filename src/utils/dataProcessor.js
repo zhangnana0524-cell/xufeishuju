@@ -50,155 +50,153 @@ const normalizeRenewalStatus = (status) => {
   return status; // 保持原值
 };
 
+// 级别展示顺序（其余级别排在后面）
+export const LEVEL_ORDER = ['PU1', 'PU2', 'PU3', 'KET', 'PET'];
+
+const levelSortKey = (name) => {
+  const idx = LEVEL_ORDER.indexOf(String(name).trim().toUpperCase());
+  return idx === -1 ? LEVEL_ORDER.length : idx;
+};
+
+// 业务口径：续费率 =（已续费 + 联报）/ 总人数
+const calcRate = (stats) =>
+  stats.total > 0 ? (((stats.renewed + stats.combined) / stats.total) * 100).toFixed(1) : '0.0';
+
+const emptyStats = () => ({ total: 0, renewed: 0, combined: 0, notRenewed: 0 });
+
+const addToStats = (stats, status) => {
+  stats.total++;
+  if (status === '已续费') stats.renewed++;
+  else if (status === '联报') stats.combined++;
+  else if (status === '未续费') stats.notRenewed++;
+};
+
 // 计算续费统计
-export const processData = (rawData) => {
+// filters: { level, teacher } —— 传入时只统计匹配的数据（'全部' 或空表示不过滤）
+export const processData = (rawData, filters = {}) => {
   if (!rawData || rawData.length === 0) {
     return {
       totalStudents: 0,
       renewed: 0,
       notRenewed: 0,
       combined: 0,
-      renewalRate: 0,
+      renewalRate: '0.0',
       byLevel: [],
       byTeacher: [],
       byClass: [],
       byStatus: [],
+      byLevelTeacher: [],
       details: []
     };
   }
 
   // 先向下填充合并单元格留下的空值，再过滤有效数据（有student_id的行，且不是退费/休学状态）
   const filledData = forwardFill(rawData);
-  const validData = filledData.filter(row =>
+  let validData = filledData.filter(row =>
     row.student_id && !isExcludedStatus(row['续费状态'])
   );
 
-  let renewed = 0;
-  let notRenewed = 0;
-  let combined = 0;
+  // 应用级别/老师筛选
+  if (filters.level && filters.level !== '全部') {
+    validData = validData.filter(row => String(row['级别'] ?? '未知').trim() === filters.level);
+  }
+  if (filters.teacher && filters.teacher !== '全部') {
+    validData = validData.filter(row => String(row['带班老师姓名'] ?? '未分配').trim() === filters.teacher);
+  }
 
+  const overall = emptyStats();
   const levelStats = {};
   const teacherStats = {};
   const classStats = {};
-  const statusCount = {
-    '已续费': 0,
-    '未续费': 0,
-    '联报': 0,
-  };
+  const levelTeacherStats = {};
 
   validData.forEach(row => {
     const status = normalizeRenewalStatus(row['续费状态']);
-    const level = row['级别'] || '未知';
-    const teacher = row['带班老师姓名'] || '未分配';
-    const className = row['Classes Name'] || '未知班级';
+    const level = String(row['级别'] ?? '未知').trim() || '未知';
+    const teacher = String(row['带班老师姓名'] ?? '未分配').trim() || '未分配';
+    const className = String(row['Classes Name'] ?? '未知班级').trim() || '未知班级';
 
-    // 统计续费状态
-    if (status === '已续费') {
-      renewed++;
-    } else if (status === '未续费') {
-      notRenewed++;
-    } else if (status === '联报') {
-      combined++;
-    }
+    addToStats(overall, status);
 
-    // 更新状态计数
-    if (statusCount.hasOwnProperty(status)) {
-      statusCount[status]++;
-    }
+    if (!levelStats[level]) levelStats[level] = emptyStats();
+    addToStats(levelStats[level], status);
 
-    // 按级别统计
-    if (!levelStats[level]) {
-      levelStats[level] = { total: 0, renewed: 0, combined: 0, notRenewed: 0 };
-    }
-    levelStats[level].total++;
-    if (status === '已续费') levelStats[level].renewed++;
-    else if (status === '联报') levelStats[level].combined++;
-    else if (status === '未续费') levelStats[level].notRenewed++;
+    if (!teacherStats[teacher]) teacherStats[teacher] = emptyStats();
+    addToStats(teacherStats[teacher], status);
 
-    // 按教师统计
-    if (!teacherStats[teacher]) {
-      teacherStats[teacher] = { total: 0, renewed: 0, combined: 0, notRenewed: 0 };
-    }
-    teacherStats[teacher].total++;
-    if (status === '已续费') teacherStats[teacher].renewed++;
-    else if (status === '联报') teacherStats[teacher].combined++;
-    else if (status === '未续费') teacherStats[teacher].notRenewed++;
+    if (!classStats[className]) classStats[className] = emptyStats();
+    addToStats(classStats[className], status);
 
-    // 按班级统计
-    if (!classStats[className]) {
-      classStats[className] = { total: 0, renewed: 0, combined: 0, notRenewed: 0 };
+    // 级别 × 老师 交叉统计
+    if (!levelTeacherStats[level]) levelTeacherStats[level] = { teachers: {}, subtotal: emptyStats() };
+    if (!levelTeacherStats[level].teachers[teacher]) {
+      levelTeacherStats[level].teachers[teacher] = emptyStats();
     }
-    classStats[className].total++;
-    if (status === '已续费') classStats[className].renewed++;
-    else if (status === '联报') classStats[className].combined++;
-    else if (status === '未续费') classStats[className].notRenewed++;
+    addToStats(levelTeacherStats[level].teachers[teacher], status);
+    addToStats(levelTeacherStats[level].subtotal, status);
   });
 
-  const totalStudents = renewed + notRenewed + combined;
-  const renewalRate = totalStudents > 0 ? ((renewed / totalStudents) * 100).toFixed(1) : 0;
+  const toSortedArray = (statsMap) =>
+    Object.entries(statsMap).map(([name, stats]) => ({
+      name,
+      ...stats,
+      rate: calcRate(stats)
+    }));
 
-  // 转换为数组并排序
-  const byLevel = Object.entries(levelStats).map(([level, stats]) => ({
-    name: level,
-    total: stats.total,
-    renewed: stats.renewed,
-    combined: stats.combined,
-    notRenewed: stats.notRenewed,
-    rate: stats.total > 0 ? ((stats.renewed / stats.total) * 100).toFixed(1) : 0
-  })).sort((a, b) => b.total - a.total);
+  const byLevel = toSortedArray(levelStats)
+    .sort((a, b) => levelSortKey(a.name) - levelSortKey(b.name));
 
-  const byTeacher = Object.entries(teacherStats).map(([teacher, stats]) => ({
-    name: teacher,
-    total: stats.total,
-    renewed: stats.renewed,
-    combined: stats.combined,
-    notRenewed: stats.notRenewed,
-    rate: stats.total > 0 ? ((stats.renewed / stats.total) * 100).toFixed(1) : 0
-  })).sort((a, b) => b.renewed - a.renewed);
+  const byTeacher = toSortedArray(teacherStats)
+    .sort((a, b) => parseFloat(b.rate) - parseFloat(a.rate) || b.total - a.total);
 
-  const byClass = Object.entries(classStats).map(([className, stats]) => ({
-    name: className,
-    total: stats.total,
-    renewed: stats.renewed,
-    combined: stats.combined,
-    notRenewed: stats.notRenewed,
-    rate: stats.total > 0 ? ((stats.renewed / stats.total) * 100).toFixed(1) : 0
-  })).sort((a, b) => b.total - a.total);
+  const byClass = toSortedArray(classStats)
+    .sort((a, b) => b.total - a.total);
+
+  // 各级别·带班老师分析（级别按固定顺序，组内按续费率降序，含小计）
+  const byLevelTeacher = Object.entries(levelTeacherStats)
+    .sort((a, b) => levelSortKey(a[0]) - levelSortKey(b[0]))
+    .map(([level, group]) => ({
+      level,
+      teachers: toSortedArray(group.teachers)
+        .sort((a, b) => parseFloat(b.rate) - parseFloat(a.rate) || b.total - a.total),
+      subtotal: { ...group.subtotal, rate: calcRate(group.subtotal) }
+    }));
 
   const byStatus = [
-    { name: '已续费', value: renewed, color: '#10b981' },
-    { name: '联报', value: combined, color: '#3b82f6' },
-    { name: '未续费', value: notRenewed, color: '#ef4444' }
+    { name: '已续费', value: overall.renewed, color: '#10b981' },
+    { name: '联报', value: overall.combined, color: '#3b82f6' },
+    { name: '未续费', value: overall.notRenewed, color: '#ef4444' }
   ].filter(s => s.value > 0);
 
   return {
-    totalStudents,
-    renewed,
-    notRenewed,
-    combined,
-    renewalRate,
+    totalStudents: overall.total,
+    renewed: overall.renewed,
+    notRenewed: overall.notRenewed,
+    combined: overall.combined,
+    renewalRate: calcRate(overall),
     byLevel,
     byTeacher,
     byClass,
     byStatus,
+    byLevelTeacher,
     details: validData
   };
 };
 
-// 导出为CSV
+// 导出为CSV（级别×老师分析，与看板表格一致）
 export const exportToCSV = (data, filename = '续费数据统计.csv') => {
-  const byTeacher = data.byTeacher;
-  const header = ['教师名称', '总人数', '已续费', '联报', '未续费', '续费率(%)'];
-  const rows = byTeacher.map(t => [
-    t.name,
-    t.total,
-    t.renewed,
-    t.combined,
-    t.notRenewed,
-    t.rate
-  ]);
+  const header = ['级别', '带班老师', '联报人数', '已续费人数', '未续费人数', '总人数', '续费率(%)'];
+  const rows = [];
 
-  const csv = [
+  data.byLevelTeacher.forEach(group => {
+    group.teachers.forEach(t => {
+      rows.push([group.level, t.name, t.combined, t.renewed, t.notRenewed, t.total, t.rate]);
+    });
+    const s = group.subtotal;
+    rows.push([`${group.level} 小计`, '', s.combined, s.renewed, s.notRenewed, s.total, s.rate]);
+  });
+
+  const csv = '﻿' + [
     header.join(','),
     ...rows.map(row => row.join(','))
   ].join('\n');

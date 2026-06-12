@@ -15,6 +15,12 @@ export const KPICards = ({ data }) => {
       color: 'bg-green-100 text-green-600'
     },
     {
+      label: '联报',
+      value: data.combined,
+      icon: '🔗',
+      color: 'bg-sky-100 text-sky-600'
+    },
+    {
       label: '未续费',
       value: data.notRenewed,
       icon: '❌',
@@ -24,12 +30,13 @@ export const KPICards = ({ data }) => {
       label: '续费率',
       value: `${data.renewalRate}%`,
       icon: '📊',
-      color: 'bg-purple-100 text-purple-600'
+      color: 'bg-purple-100 text-purple-600',
+      note: '(已续费+联报)/总人数'
     }
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 w-full">
       {cards.map((card, index) => (
         <div key={index} className="card bg-base-100 shadow-md border border-base-300">
           <div className="card-body p-6">
@@ -37,6 +44,9 @@ export const KPICards = ({ data }) => {
               <div>
                 <p className="text-sm text-base-content/70 font-medium">{card.label}</p>
                 <p className="text-3xl font-bold text-base-content mt-2">{card.value}</p>
+                {card.note && (
+                  <p className="text-xs text-base-content/50 mt-1">{card.note}</p>
+                )}
               </div>
               <div className={`text-2xl w-12 h-12 flex items-center justify-center rounded-lg ${card.color}`}>
                 {card.icon}

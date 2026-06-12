@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { KPICards } from './components/KPICards';
 import { LevelChart, StatusChart, RenewalRateChart } from './components/Charts';
 import { DataTable } from './components/DataTable';
 import { LevelTeacherTable } from './components/LevelTeacherTable';
+import { parseExcelFile } from './utils/excelParser';
 import { processData, exportToCSV } from './utils/dataProcessor';
 import './App.css';
 
@@ -11,21 +12,25 @@ const ALL = '全部';
 
 function App() {
   const [rawData, setRawData] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [updateTime, setUpdateTime] = useState(null);
+  const [isTempData, setIsTempData] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [filterLevel, setFilterLevel] = useState(ALL);
   const [filterTeacher, setFilterTeacher] = useState(ALL);
-  const [uploadTime, setUploadTime] = useState(null);
+  const fileInputRef = useRef(null);
 
+  // 启动时直接加载内置数据，打开链接即可查看
   useEffect(() => {
-    const saved = localStorage.getItem('renewalData');
-    if (saved) {
-      try {
-        setRawData(JSON.parse(saved));
-        setUploadTime(localStorage.getItem('renewalDataTime'));
-      } catch (e) {
-        console.error('加载保存的数据失败', e);
-      }
-    }
+    fetch('/data.json')
+      .then(r => {
+        if (!r.ok) throw new Error('内置数据不存在');
+        return r.json();
+      })
+      .then(({ updatedAt, rows }) => {
+        setRawData(rows);
+        setUpdateTime(updatedAt);
+      })
+      .catch(() => setLoadFailed(true));
   }, []);
 
   // 全量统计：用于生成筛选器选项
@@ -62,18 +67,21 @@ function App() {
 
   const hasFilter = filterLevel !== ALL || filterTeacher !== ALL;
 
-  const handleDataLoaded = (data) => {
-    setIsLoading(true);
-    setTimeout(() => {
-      const now = new Date().toLocaleString('zh-CN', { hour12: false });
+  // 临时上传：仅本次浏览生效，刷新后恢复内置数据
+  const handleFileSelected = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const data = await parseExcelFile(file);
       setRawData(data);
-      setUploadTime(now);
+      setUpdateTime(new Date().toLocaleString('zh-CN', { hour12: false }));
+      setIsTempData(true);
       setFilterLevel(ALL);
       setFilterTeacher(ALL);
-      localStorage.setItem('renewalData', JSON.stringify(data));
-      localStorage.setItem('renewalDataTime', now);
-      setIsLoading(false);
-    }, 300);
+    } catch (error) {
+      alert('文件读取失败: ' + error.message);
+    }
+    event.target.value = '';
   };
 
   const handleExport = () => {
@@ -87,11 +95,15 @@ function App() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="mb-8 text-center">
           <h1 className="text-4xl font-bold text-base-content mb-2">续费数据看板</h1>
-          <p className="text-base-content/70">实时分析班级续费情况</p>
-        </div>
-
-        <div className="mb-8 flex justify-center">
-          <FileUpload onDataLoaded={handleDataLoaded} isLoading={isLoading} />
+          <p className="text-base-content/70">
+            各级别·带班老师续费率分析（续费动作已结束班期）
+          </p>
+          {updateTime && (
+            <p className="text-sm text-base-content/50 mt-1">
+              📅 数据更新于 {updateTime}
+              {isTempData && '（临时数据，刷新页面恢复）'}
+            </p>
+          )}
         </div>
 
         {processedData ? (
@@ -138,9 +150,6 @@ function App() {
                   {hasFilter
                     ? `当前筛选：${filterLevel !== ALL ? filterLevel : ''} ${filterTeacher !== ALL ? filterTeacher : ''}`
                     : '展示全部数据'}
-                  {uploadTime && (
-                    <span className="ml-3">📅 数据上传于 {uploadTime}（数据有更新时请点"重新上传"）</span>
-                  )}
                 </span>
               </div>
             </div>
@@ -157,13 +166,25 @@ function App() {
               </button>
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => {
-                  setRawData(null);
-                  localStorage.removeItem('renewalData');
-                }}
+                onClick={() => fileInputRef.current?.click()}
               >
-                🔄 重新上传
+                📤 上传Excel临时查看
               </button>
+              {isTempData && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => location.reload()}
+                >
+                  ↩️ 恢复看板数据
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={handleFileSelected}
+              />
             </div>
 
             {/* 级别×老师 续费率分析（核心报表） */}
@@ -203,9 +224,24 @@ function App() {
               data={processedData.byTeacher.slice(0, 10)}
             />
           </div>
+        ) : loadFailed ? (
+          // 内置数据缺失时退回上传模式
+          <div className="space-y-4">
+            <p className="text-center text-base-content/50">未找到内置数据，请上传 Excel 文件查看</p>
+            <div className="flex justify-center">
+              <FileUpload
+                onDataLoaded={(data) => {
+                  setRawData(data);
+                  setUpdateTime(new Date().toLocaleString('zh-CN', { hour12: false }));
+                  setIsTempData(true);
+                }}
+                isLoading={false}
+              />
+            </div>
+          </div>
         ) : (
           <div className="text-center py-12 text-base-content/50">
-            <p className="text-lg">请上传 Excel 文件开始分析</p>
+            <p className="text-lg">数据加载中…</p>
           </div>
         )}
       </div>

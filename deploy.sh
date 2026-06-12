@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 续费数据看板 - 快速部署脚本
-# GitHub用户名: wuwei0772
+# GitHub用户名: zhangnana0524-cell
 
 set -e  # 遇到错误立即退出
 
@@ -17,8 +17,8 @@ fi
 # 初始化Git
 echo "📝 Step 1: 初始化Git仓库..."
 git init
-git config user.email "wuwei@example.com"
-git config user.name "wuwei0772"
+git config user.email "zhangnana0524@example.com"
+git config user.name "zhangnana0524-cell"
 
 # 添加所有文件
 echo "📦 Step 2: 提交代码..."
@@ -35,7 +35,7 @@ git commit -m "feat: Initial commit - Renewal Dashboard v1.1.0
 # 设置main分支
 echo "🔗 Step 3: 连接到GitHub..."
 git branch -M main
-git remote add origin https://github.com/wuwei0772/renewal-dashboard.git
+git remote add origin https://github.com/zhangnana0524-cell/renewal-dashboard.git
 
 # 推送到GitHub
 echo "📤 Step 4: 推送代码到GitHub..."
